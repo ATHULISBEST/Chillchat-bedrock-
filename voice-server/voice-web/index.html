@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>📣 Chill Chat Voice Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    #status {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>📣 Chill Chat Voice Client</h1>
+  <p>Status: <span id="status">Connecting...</span></p>
+
+  <script>
+    const statusSpan = document.getElementById("status");
+    const socket = new WebSocket("ws://192.168.1.8:3001");
+    socket.binaryType = "arraybuffer";
+
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let micStream;
+
+    // Start microphone and send audio data
+    async function startMic() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const source = audioContext.createMediaStreamSource(micStream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        processor.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const buffer = new Float32Array(inputData);
+          socket.send(buffer.buffer);
+        };
+      } catch (e) {
+        console.error("Mic error:", e);
+        statusSpan.textContent = "Mic error";
+      }
+    }
+
+    // Receive audio and play it
+    socket.onmessage = (event) => {
+      const audioData = event.data;
+      audioContext.decodeAudioData(audioData.slice(0), (decoded) => {
+        const source = audioContext.createBufferSource();
+        source.buffer = decoded;
+        source.connect(audioContext.destination);
+        source.start(0);
+      }, (e) => {
+        console.error("Audio decode error:", e);
+      });
+    };
+
+    socket.onopen = () => {
+      statusSpan.textContent = "Connected";
+      startMic();
+    };
+
+    socket.onerror = () => {
+      statusSpan.textContent = "Connection error";
+    };
+
+    socket.onclose = () => {
+      statusSpan.textContent = "Disconnected";
+    };
+  </script>
+</body>
+</html>
